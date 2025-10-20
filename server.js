@@ -4,6 +4,9 @@ import fetch from "node-fetch";
 import path from "path";
 import dotenv from "dotenv";
 import { fileURLToPath } from "url";
+
+
+
 dotenv.config();
 
 // Get __dirname working with ES modules

@@ -32,11 +32,33 @@
 
     <div id="mapCanvas"></div>
 
-    <script>
+    <script type="module">
+
+        // import { Client } from "@googlemaps/google-maps-services-js";
+
+
         let myMap;
         let buses = [];
         let routeColors = new Map();
         const apiUrl = '/busdata';
+
+
+        const client = new Client({});
+
+        client
+            .elevation({
+                params: {
+                    locations: [{ lat: 45, lng: -110 }],
+                    key: process.env.MAPS_API_KEY,
+                },
+                timeout: 1000, // milliseconds
+            })
+            .then((r) => {
+                console.log(r.data.results[0].elevation);
+            })
+            .catch((e) => {
+                console.log(e.response.data.error_message);
+            });
 
 
         const GREATER_MANCHESTER_BOUNDS = {
@@ -50,12 +72,16 @@
             west: -2.274722,
         };
 
-        const busStopCords = {
-            towardsTrafford: 53.46593489475531 - 2.2563926562527556,
-            towardsTown: 53.46652596916137 - 2.254032555001591
-        };
+        // const BUS_STOP_CORDS = {
+        //     towardsTrafford: ,
+        //     towardsTown: 53.46652596916137 - 2.254032555001591
+        // };
 
 
+
+
+        // CREATE FUNCTION THAT PASSES LONG AND LAT OF SPECIFIC BUS INTO
+        // GOOGLE MAPS DISTANCE API
 
 
 
@@ -84,13 +110,9 @@
                 this.lineRef = lineRef;
                 this.vehicleRef = vehicleRef;
                 this.color = this.generateColor(lineRef);
-                this.size = 15;
+                this.size;
                 this.marker = this.createBusMarker();
-
-                // this.busStopMarker = this.createBusStopMarker();
                 this.updateMarkerPosition();
-
-
             }
 
             update(lat, lon) {
@@ -109,29 +131,8 @@
             getMarkerHtml() {
                 const zoom = myMap.getZoom();
                 const size = Math.max(15, Math.min(40, zoom * 1.5));
-                return `
-          <div class="bus-marker" style="width:${size}px; height:${size}px;">
-            <span class="bus-label">${this.lineRef}</span>
-          </div>
-        `;
-            }
-
-            // createBusStopMarker() {
-
-            // }
-
-            createHomeMarker() {
-                const icon = L.divIcon({
-                    className: 'bus-stop-marker',
-                    html: this.createHomeMarker(),
-                    iconSize: [50, 50],
-                    iconAnchor: [25, 25]
-                });
-                return L.marker([53.468245986596195, -2.255990357051008], { icon: icon }).addTo(myMap);
-
-
-
-
+                return `<div class="bus-marker" style="width:${size}px; height:${size}px;">
+            <span class="bus-label">${this.lineRef}</span>`;
             }
 
             createBusMarker() {
@@ -141,8 +142,48 @@
                     iconSize: [this.size, this.size],
                     iconAnchor: [this.size / 2, this.size / 2]
                 });
+
+                var home = L.circle([53.46617443275019, -2.2561640531024163], {
+                    color: 'red',
+                    fillColor: '#f09',
+                    fillOpacity: 0.5,
+                    radius: 5,
+
+
+
+                }).addTo(myMap);
+
+                var towardsTrafford = L.circle([53.465924148239594, -2.256400057099824], {
+                    color: 'red',
+                    fillColor: '#f09',
+                    fillOpacity: 0.5,
+                    radius: 5,
+
+
+
+                }).addTo(myMap);
+
+
+                var towardsTrafford = L.circle([53.46651099330631, -2.2540381391622155], {
+                    color: 'red',
+                    fillColor: '#f09',
+                    fillOpacity: 0.5,
+                    radius: 5,
+
+
+
+
+                }).addTo(myMap);
+
+
+
+
+
+
                 return L.marker([this.lat, this.lon], { icon: icon }).addTo(myMap);
             }
+
+
 
             generateColor(lineRef) {
                 return '#FFD500';
@@ -217,6 +258,8 @@
                     } catch (e) {
                         console.error("Error processing vehicle activity", e);
                     }
+
+
                 });
 
                 updateBuses(newBusesMap);
@@ -249,7 +292,6 @@
         document.addEventListener('DOMContentLoaded', () => {
             setupMap();
             updateBusPositions();
-            createHomeMarker();
             // setInterval(updateBusPositions, 10000);
         });
     </script>

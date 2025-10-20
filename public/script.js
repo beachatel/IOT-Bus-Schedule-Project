@@ -1,0 +1,259 @@
+// import {Client} from "@googlemaps/google-maps-services-js";
+
+let myMap;
+let buses = [];
+let routeColors = new Map();
+const apiUrl = '/busdata';
+
+
+const client = new Client({});
+
+client
+    .elevation({
+        params: {
+            locations: [{ lat: 45, lng: -110 }],
+            key: process.env.MAPS_API_KEY,
+        },
+        timeout: 1000, // milliseconds
+    })
+    .then((r) => {
+        console.log(r.data.results[0].elevation);
+    })
+    .catch((e) => {
+        console.log(e.response.data.error_message);
+    });
+
+
+const GREATER_MANCHESTER_BOUNDS = {
+    //old north: 53.58, 
+    north: 53.466944,
+    // old south: 53.36,
+    south: 53.463611,
+    // old east: -2.15,
+    east: -2.238333,
+    // old  west: -2.35
+    west: -2.274722,
+};
+
+// const BUS_STOP_CORDS = {
+//     towardsTrafford: ,
+//     towardsTown: 53.46652596916137 - 2.254032555001591
+// };
+
+
+
+
+// CREATE FUNCTION THAT PASSES LONG AND LAT OF SPECIFIC BUS INTO
+// GOOGLE MAPS DISTANCE API
+
+
+
+
+function isWithinGreaterManchester(lat, lon) {
+    return lat >= GREATER_MANCHESTER_BOUNDS.south &&
+        lat <= GREATER_MANCHESTER_BOUNDS.north &&
+        lon >= GREATER_MANCHESTER_BOUNDS.west &&
+        lon <= GREATER_MANCHESTER_BOUNDS.east;
+}
+
+
+function getBoundingBox() {
+    const bounds = myMap.getBounds();
+    const minLat = Math.max(bounds.getSouthWest().lat, GREATER_MANCHESTER_BOUNDS.south);
+    const maxLat = Math.min(bounds.getNorthEast().lat, GREATER_MANCHESTER_BOUNDS.north);
+    const minLon = Math.max(bounds.getSouthWest().lng, GREATER_MANCHESTER_BOUNDS.west);
+    const maxLon = Math.min(bounds.getNorthEast().lng, GREATER_MANCHESTER_BOUNDS.east);
+    return `${minLon},${maxLat},${maxLon},${minLat}`;
+}
+
+class Bus {
+    constructor(lat, lon, lineRef, vehicleRef) {
+        this.lat = lat;
+        this.lon = lon;
+        this.lineRef = lineRef;
+        this.vehicleRef = vehicleRef;
+        this.color = this.generateColor(lineRef);
+        this.size;
+        this.marker = this.createBusMarker();
+        this.updateMarkerPosition();
+    }
+
+    update(lat, lon) {
+        this.lat = lat;
+        this.lon = lon;
+        this.updateMarkerPosition();
+    }
+
+    updateMarkerPosition() {
+        if (this.marker && !isNaN(this.lon) && !isNaN(this.lat)) {
+            const newLatLng = new L.LatLng(this.lat, this.lon);
+            this.marker.setLatLng(newLatLng);
+        }
+    }
+
+    getMarkerHtml() {
+        const zoom = myMap.getZoom();
+        const size = Math.max(15, Math.min(40, zoom * 1.5));
+        return `<div class="bus-marker" style="width:${size}px; height:${size}px;">
+    <span class="bus-label">${this.lineRef}</span>`;
+    }
+
+    createBusMarker() {
+        const icon = L.divIcon({
+            className: 'bus-marker',
+            html: this.getMarkerHtml(),
+            iconSize: [this.size, this.size],
+            iconAnchor: [this.size / 2, this.size / 2]
+        });
+
+        var home = L.circle([53.46617443275019, -2.2561640531024163], {
+            color: 'red',
+            fillColor: '#f09',
+            fillOpacity: 0.5,
+            radius: 5,
+
+
+
+        }).addTo(myMap);
+
+        var towardsTrafford = L.circle([53.465924148239594, -2.256400057099824], {
+            color: 'red',
+            fillColor: '#f09',
+            fillOpacity: 0.5,
+            radius: 5,
+
+
+
+        }).addTo(myMap);
+
+
+        var towardsTrafford = L.circle([53.46651099330631, -2.2540381391622155], {
+            color: 'red',
+            fillColor: '#f09',
+            fillOpacity: 0.5,
+            radius: 5,
+
+
+
+
+        }).addTo(myMap);
+
+
+
+
+
+
+        return L.marker([this.lat, this.lon], { icon: icon }).addTo(myMap);
+    }
+
+
+
+    generateColor(lineRef) {
+        return '#FFD500';
+    }
+
+    display() { }
+}
+
+function setupMap() {
+    myMap = L.map('mapCanvas', {
+        center: [53.4808, -2.2426],
+        zoom: 12,
+        minZoom: 9,
+        maxZoom: 19
+    });
+    L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
+        maxZoom: 19,
+        attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+    }).addTo(myMap);
+
+
+    const greaterManchesterBounds = L.latLngBounds(
+        [GREATER_MANCHESTER_BOUNDS.south, GREATER_MANCHESTER_BOUNDS.west],
+        [GREATER_MANCHESTER_BOUNDS.north, GREATER_MANCHESTER_BOUNDS.east]
+    );
+    myMap.fitBounds(greaterManchesterBounds);
+
+
+    myMap.on('moveend', updateBusPositions);
+    myMap.on('zoomend', updateBusPositions);
+}
+
+async function fetchManchesterBeeNetworkBuses() {
+    try {
+        const boundingBox = getBoundingBox();
+
+        if (!boundingBox) {
+            console.log('Current view is outside Greater Manchester bounds');
+            return;
+        }
+
+        const response = await fetch(`${apiUrl}?boundingBox=${boundingBox}`);
+        if (!response.ok) {
+            throw new Error(`HTTP error! Status: ${response.status}`);
+        }
+        const xmlDoc = new DOMParser().parseFromString(await response.text(), "text/xml");
+        const vehicleActivities = xmlDoc.getElementsByTagName("VehicleActivity");
+        const newBusesMap = new Map();
+
+        Array.from(vehicleActivities).forEach(activity => {
+            try {
+                const journey = activity.querySelector("MonitoredVehicleJourney");
+                if (!journey) return;
+
+                const latitude = parseFloat(activity.querySelector("Latitude")?.textContent);
+                const longitude = parseFloat(activity.querySelector("Longitude")?.textContent);
+                const lineRef = journey.querySelector("LineRef")?.textContent || "";
+                const vehicleRef = (journey.querySelector("VehicleRef")?.textContent || "").trim();
+
+
+                const recordedAtTime = activity.querySelector("RecordedAtTime")?.textContent;
+                if (!recordedAtTime) return;
+                const now = new Date();
+                const recordedTime = new Date(recordedAtTime);
+                const diffMs = now - recordedTime;
+                if (diffMs > 2 * 60 * 1000) return;
+
+
+                if (!isNaN(latitude) && !isNaN(longitude) && isWithinGreaterManchester(latitude, longitude)) {
+                    newBusesMap.set(vehicleRef, { lat: latitude, lon: longitude, lineRef, vehicleRef });
+                }
+            } catch (e) {
+                console.error("Error processing vehicle activity", e);
+            }
+
+
+        });
+
+        updateBuses(newBusesMap);
+
+    } catch (error) {
+        console.error("Error fetching bus data:", error);
+    }
+}
+
+function updateBuses(newBusesMap) {
+
+    buses.forEach(bus => {
+        if (bus.marker) {
+            myMap.removeLayer(bus.marker);
+        }
+    });
+    buses = [];
+
+
+    newBusesMap.forEach(newBusData => {
+        const newBus = new Bus(newBusData.lat, newBusData.lon, newBusData.lineRef, newBusData.vehicleRef);
+        buses.push(newBus);
+    });
+}
+
+function updateBusPositions() {
+    fetchManchesterBeeNetworkBuses();
+}
+
+document.addEventListener('DOMContentLoaded', () => {
+    setupMap();
+    updateBusPositions();
+    // setInterval(updateBusPositions, 10000);
+});
